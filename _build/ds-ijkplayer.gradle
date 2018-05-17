@@ -1,0 +1,10 @@
+dependencies {
+    def trustyDependencies = rootProject.ext.trustyDependencies
+
+    compile trustyDependencies.ijkPlayer_java
+    compile trustyDependencies.ijkPlayer_armv7a
+    compile trustyDependencies.ijkPlayer_arm64
+    compile trustyDependencies.ijkPlayer_x86
+    compile trustyDependencies.ijkplayer_exo
+//    compile trustyDependencies.ijkPlayer_x86_64
+}

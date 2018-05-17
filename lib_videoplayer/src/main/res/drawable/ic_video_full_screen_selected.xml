@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+        android:width="56dp"
+        android:height="56dp"
+        android:viewportWidth="256"
+        android:viewportHeight="256">
+    
+    <path
+        android:fillColor="#ffffff"
+        android:fillAlpha="1.00"
+        android:strokeAlpha="1.00"
+        android:strokeWidth="1"
+        android:pathData="M 31.89 48.00 C 37.24 42.61 42.61 37.24 48.00 31.89 C 61.35 45.19 74.65 58.55 88.00 71.86 C 96.01 63.88 103.98 55.86 111.99 47.89 C 112.01 69.26 112.00 90.63 112.00 112.00 C 90.63 111.99 69.26 112.02 47.89 111.99 C 55.87 103.99 63.88 96.01 71.86 88.00 C 58.55 74.65 45.19 61.35 31.89 48.00 Z" />
+    <path
+        android:fillColor="#ffffff"
+        android:fillAlpha="1.00"
+        android:strokeAlpha="1.00"
+        android:strokeWidth="1"
+        android:pathData="M 168.00 71.86 C 181.35 58.55 194.65 45.19 208.00 31.89 C 213.39 37.24 218.76 42.61 224.11 48.00 C 210.81 61.35 197.45 74.65 184.14 88.00 C 192.12 96.01 200.13 103.98 208.11 111.99 C 186.74 112.01 165.37 112.00 144.00 112.00 C 144.00 90.63 143.99 69.26 144.01 47.89 C 152.02 55.86 159.99 63.88 168.00 71.86 Z" />
+    <path
+        android:fillColor="#ffffff"
+        android:fillAlpha="1.00"
+        android:strokeAlpha="1.00"
+        android:strokeWidth="1"
+        android:pathData="M 47.89 144.01 C 69.26 143.99 90.63 144.00 112.00 144.00 C 112.00 165.37 112.01 186.74 111.99 208.11 C 103.98 200.13 96.01 192.12 88.00 184.14 C 74.65 197.45 61.35 210.81 48.00 224.11 C 42.61 218.76 37.24 213.39 31.89 208.00 C 45.19 194.65 58.55 181.35 71.86 168.00 C 63.88 159.99 55.86 152.02 47.89 144.01 Z" />
+    <path
+        android:fillColor="#ffffff"
+        android:fillAlpha="1.00"
+        android:strokeAlpha="1.00"
+        android:strokeWidth="1"
+        android:pathData="M 144.00 144.00 C 165.37 144.00 186.74 143.99 208.11 144.01 C 200.14 152.02 192.11 159.99 184.14 168.00 C 197.45 181.35 210.81 194.65 224.11 208.00 C 218.76 213.39 213.39 218.76 208.00 224.11 C 194.65 210.81 181.35 197.45 168.00 184.14 C 159.99 192.12 152.02 200.13 144.01 208.11 C 143.99 186.74 144.00 165.37 144.00 144.00 Z" />
+</vector>

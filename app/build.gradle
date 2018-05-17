@@ -1,0 +1,25 @@
+apply plugin: 'com.android.application'
+
+apply from: '../_build/app-config-android.gradle'
+apply from: '../_build/ds-ijkplayer.gradle'
+apply from: '../_build/ds-test.gradle'
+apply from: '../_build/ds-android-support.gradle'
+apply from: '../_build/ds-butter-knife.gradle'
+
+android {
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    compile project(':lib_videoplayer')
+
+    implementation 'com.android.support.constraint:constraint-layout:1.1.0'
+
+}
+

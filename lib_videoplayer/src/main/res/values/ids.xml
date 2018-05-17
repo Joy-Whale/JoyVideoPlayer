@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    
+    <!-- 标题按钮 -->
+    <item name="textTitle" type="id"/>
+    <!-- 当前播放进度 -->
+    <item name="textCurrentTime" type="id"/>
+    <!-- 播放时长 -->
+    <item name="textDurationTime" type="id"/>
+    <!-- 封面图 -->
+    <item name="imageCover" type="id"/>
+    <!-- 播放按钮 -->
+    <item name="btnPlay" type="id"/>
+    <!-- 返回按钮 -->
+    <item name="btnBack" type="id"/>
+    <!-- 全屏按钮 -->
+    <item name="btnFullScreen" type="id"/>
+    <!-- 锁屏按钮 -->
+    <item name="btnLock" type="id"/>
+    <!-- 播放进度条 -->
+    <item name="playingSeekBar" type="id"/>
+    <!-- 加载中view -->
+    <item name="layoutLoading" type="id"/>
+    <!-- 视频View -->
+    <item name="layoutVideo" type="id"/>
+    <!-- 控制view -->
+    <item name="layoutController" type="id"/>
+
+</resources>

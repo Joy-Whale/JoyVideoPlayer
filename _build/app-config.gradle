@@ -1,0 +1,81 @@
+ext {
+    androidBuildToolsVersion = "25.0.2"
+    androidMinSdkVersion = 21
+    androidTargetSdkVersion = 22
+    androidCompileSdkVersion = 26
+
+    applicationId = "cn.joy"
+    versionCode = 106
+    versionName = '1.0.0'
+
+    currentVersionCode = '1'
+    guideVersionCode = '1'
+
+    keyPath = '../_build/_bee.jks'
+    keyAliasRelease = 'bee'
+    keyPasswordRelease = 'bee123'
+    storePasswordRelease = 'bee123'
+
+    // greenDao
+    greenDaoSchemaVersion = '1'
+    greenDaoPackage = 'com.beebee.data.db'
+
+    channelId = 'sougou'
+
+    //  接口域名地址
+    //  httpHost = 'http://42.62.5.170'
+    httpHost = 'https://api.anson-zhifu.cn/'
+
+//    httpHostTest = 'http://192.168.0.126'
+
+    httpHostTest = 'https://api.anson-zhifu.cn/'
+
+    httpHostNodeTest = 'http://192.168.0.121:4400'
+
+    httpHostNodeTest = 'http://23.83.246.243:4400'
+
+    httpPath = "/zz-api"
+    httpPathTest = "/zz-app"
+
+    // 文章详情页
+    httpArticleDetail = '/zz-api/archives/getArchivesContent?id=%s&deviceId=%s&deviceType=1&userId=%s'
+    httpArticleDetailTest = '/zz-app/archives/getArchivesContent?id=%s&deviceId=%s&deviceType=1&userId=%s'
+
+    // 文章分享页
+    httpArticleShare = 'http://www.beebee.com/views/detail/ar_detail.html?id=%s'
+    // 主题分享页
+    httpTopicShare = 'http://www.beebee.com/views/active/actshare.html?id=%s'
+
+    //  第三方平台相关key
+    platformBuglyId = '8fdfc411f1'
+    platformBuglyAppKey = '3c4c3fe9-687d-4800-8870-462b0f21d126'
+
+    platformQQKey = '1106534573'
+    platformQQSecretKey = 'IXOWBVpAYja4zMDl'
+
+    platformWechatKey = 'wx00ae4cb1d4521c02'
+    platformWechatSecretKey = '2c7901df8e081809b96cc72110a69709'
+
+    platfomrSinaKey = '1783253313'
+    platformSinaSecretKey = 'bb677c16fa4af445c7bd89084462fd17'
+    platformSinaTargetUrl = 'https://zzshows.com'
+//    platformSinaTargetUrl = 'https://api.weibo.com/2/statuses/public_timeline.json?access_token=%s'
+//    platformSinaTargetUrl = 'https://api.weibo.com/oauth2/default.html'
+
+    platformXunFeiKey = "5a337199"
+
+    platformQiniuKey = "0h0ZKun_1BAo7no3YZ5JkgbagAVYrwB1SVZq-ob4"
+    platformQiniuSecretKey = "U8LBRaWgMPuyr2KFj6IBBDz79Sp3lF1Xumq30GQV"
+    platformQiniuBucket = "beebee-test"
+    platformQiniuDomain = "http://owohzzptd.bkt.clouddn.com/"
+
+    platformJpushKey = "83764f7d1a68c72570f28d20"
+    platformJpushSecretKey = "1c78735df4a24250ad33b5b8"
+    platformJpushPackage = "com.wanzhe.BeeBee"
+
+    platformUmengKey = "5a3201aba40fa36377000458"
+    platfomrUmengSecretKey = ""
+
+    platfomrOpenInstallKey = "vmc37x"
+    platfomrOpenInstallScheme = "opd2j65z"
+}

@@ -1,0 +1,20 @@
+apply plugin: 'com.android.library'
+
+apply from: '../_build/app-config-android.gradle'
+apply from: '../_build/ds-ijkplayer.gradle'
+apply from: '../_build/ds-test.gradle'
+apply from: '../_build/ds-android-support.gradle'
+
+android {
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.android.support.constraint:constraint-layout:1.1.0'
+}
