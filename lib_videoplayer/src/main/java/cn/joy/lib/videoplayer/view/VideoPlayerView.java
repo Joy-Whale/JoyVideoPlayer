@@ -1,6 +1,7 @@
 package cn.joy.lib.videoplayer.view;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
@@ -10,14 +11,17 @@ import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Constructor;
 import java.util.Map;
 
-import cn.joy.lib.videoplayer.FieldUtils;
+import cn.joy.lib.videoplayer.utils.FieldUtils;
 import cn.joy.lib.videoplayer.IVideoPlayer;
 import cn.joy.lib.videoplayer.R;
 import cn.joy.lib.videoplayer.SimpleVideoPlayerListener;
@@ -29,8 +33,10 @@ import cn.joy.lib.videoplayer.SimpleVideoPlayerListener;
 
 public abstract class VideoPlayerView extends FrameLayout implements IVideoPlayer, IVideoPlayerView {
 
-	private View mLayoutVideo;
+	private static final int ID_FULL_SCREEN = R.id.videoFullScreen;
+
 	private View mLayoutController;
+	private ViewGroup mLayoutVideo;
 	private View mLayoutLoading;
 	private View mBtnPlay;
 	private View mBtnBack;
@@ -71,7 +77,7 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 		mBtnBack = findViewById(R.id.btnBack);
 		mBtnPlay = findViewById(R.id.btnPlay);
 		mLayoutLoading = findViewById(R.id.layoutLoading);
-		mLayoutVideo = findViewById(R.id.layoutVideo);
+		mLayoutVideo = (ViewGroup) findViewById(R.id.layoutVideo);
 		mBtnFullScreen = findViewById(R.id.btnFullScreen);
 		mTextDuration = (TextView) findViewById(R.id.textDurationTime);
 		mTextCurrentPosition = (TextView) findViewById(R.id.textCurrentTime);
@@ -83,46 +89,64 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 
 		// 播放按钮事件
 		if (mBtnPlay != null)
-			mBtnPlay.setOnClickListener(v -> {
+			mBtnPlay.setOnClickListener(mOnClickListener);
+
+		// 全屏
+		if (mBtnFullScreen != null)
+			mBtnFullScreen.setOnClickListener(mOnClickListener);
+
+		// SeekBar
+		if (mSeekBar != null)
+			mSeekBar.setOnSeekBarChangeListener(mSeekBarListener);
+	}
+
+	private OnClickListener mOnClickListener = new OnClickListener() {
+		@Override
+		public void onClick(View v) {
+			if (v.getId() == R.id.btnBack) {
+				// 返回按钮
 				if (v.isSelected()) {
 					pause();
 				} else {
 					start();
 				}
 				v.setSelected(!v.isSelected());
-			});
-
-		// 全屏
-		if (mBtnFullScreen != null) {
-			mBtnFullScreen.setOnClickListener(new OnClickListener() {
-				@Override
-				public void onClick(View v) {
-
+			} else if (v.getId() == R.id.btnFullScreen) {
+				// 全屏按钮
+				if (mVideoPlayer.isPlayable()) {
+					v.setSelected(!v.isSelected());
+					toggleFullScreen(v.isSelected());
 				}
-			});
+			} else if (v.getId() == R.id.btnLock) {
+				// 锁屏按钮
+				
+			}
+		}
+	};
+
+	private SeekBar.OnSeekBarChangeListener mSeekBarListener = new SeekBar.OnSeekBarChangeListener() {
+		@Override
+		public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+			if (fromUser) {
+				mVideoPlayer.seekTo(progress * getDuration() / 100);
+			}
 		}
 
-		if (mSeekBar != null) {
-			mSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-				@Override
-				public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-					if (fromUser) {
-						mVideoPlayer.seekTo(progress * getDuration() / 100);
-					}
-				}
-
-				@Override
-				public void onStartTrackingTouch(SeekBar seekBar) {
-					requestShowGeneralWidget();
-				}
-
-				@Override
-				public void onStopTrackingTouch(SeekBar seekBar) {
-					mVideoPlayer.seekTo(seekBar.getProgress() * getDuration() / 100);
-					requestHideGeneralWidgetDelay();
-				}
-			});
+		@Override
+		public void onStartTrackingTouch(SeekBar seekBar) {
+			requestShowGeneralWidget();
 		}
+
+		@Override
+		public void onStopTrackingTouch(SeekBar seekBar) {
+			mVideoPlayer.seekTo(seekBar.getProgress() * getDuration() / 100);
+			requestHideGeneralWidgetDelay();
+		}
+	};
+
+	@Override
+	protected void onConfigurationChanged(Configuration newConfig) {
+		super.onConfigurationChanged(newConfig);
 	}
 
 	@Override
@@ -153,8 +177,8 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 	}
 
 	@Override
-	public void attachToVideoView(View videoView) {
-
+	public void attachToVideoView(ViewGroup videoView) {
+		mVideoPlayer.attachToVideoView(mLayoutVideo);
 	}
 
 	@Override
@@ -354,6 +378,43 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 	}
 
 	/**
+	 * 切换全屏/正常状态
+	 * @param fullScreen 是否为全屏
+	 */
+	protected void toggleFullScreen(boolean fullScreen) {
+		final ViewGroup parent = getParentViewGroup();
+		View oldV = parent.findViewById(ID_FULL_SCREEN);
+		if (oldV != null) {
+			parent.removeView(oldV);
+		}
+		if (mLayoutVideo.getChildCount() > 0) {
+			mLayoutVideo.removeAllViews();
+		}
+		// 暂停播放
+		pause();
+		// 切换全屏
+		if (fullScreen) {
+			try {
+				Constructor<VideoPlayerView> constructor = (Constructor<VideoPlayerView>) getClass().getConstructor(Context.class);
+				VideoPlayerView playerView = constructor.newInstance(getContext());
+				playerView.setId(ID_FULL_SCREEN);
+				WindowManager wm = (WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE);
+				int w = wm.getDefaultDisplay().getWidth();
+				int h = wm.getDefaultDisplay().getHeight();
+				FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(h, w);
+				lp.setMargins((w - h) / 2, -(w - h) / 2, 0, 0);
+				parent.addView(playerView, lp);
+				playerView.setVideoPlayer(getVideoPlayer());
+				playerView.start();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		} else {
+			setVideoPlayer(getVideoPlayer());
+		}
+	}
+
+	/**
 	 * 设置播放控制器
 	 * @param videoPlayer 播放控制器
 	 */
@@ -373,6 +434,10 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 
 	public void setAutoHideWidgetOnPlayingDuration(int duration) {
 		this.mDurationToAutoHideWidgetOnPlaying = duration;
+	}
+
+	protected ViewGroup getParentViewGroup() {
+		return FieldUtils.getWindowParentView(getContext());
 	}
 
 	// 播放控制器监听

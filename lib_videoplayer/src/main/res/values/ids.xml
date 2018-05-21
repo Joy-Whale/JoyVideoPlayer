@@ -25,5 +25,9 @@
     <item name="layoutVideo" type="id"/>
     <!-- 控制view -->
     <item name="layoutController" type="id"/>
+    <!-- 正常的视频 -->
+    <item name="videoNormal" type="id"/>
+    <!-- 全屏的视频 -->
+    <item name="videoFullScreen" type="id"/>
 
 </resources>

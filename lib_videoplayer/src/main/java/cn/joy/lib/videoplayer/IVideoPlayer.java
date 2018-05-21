@@ -3,6 +3,7 @@ package cn.joy.lib.videoplayer;
 import android.net.Uri;
 import android.support.annotation.IntRange;
 import android.view.View;
+import android.view.ViewGroup;
 
 import java.util.Map;
 
@@ -140,7 +141,7 @@ public interface IVideoPlayer {
 	 * 加载VideoView
 	 * @param videoView videoView
 	 */
-	void attachToVideoView(View videoView);
+	void attachToVideoView(ViewGroup videoView);
 
 	/**
 	 * 预加载

@@ -6,7 +6,7 @@ import android.support.v4.app.FragmentActivity;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
-import cn.joy.lib.videoplayer.IJKVideoPlayer;
+import cn.joy.lib.videoplayer.ijk.IJKVideoPlayer;
 import cn.joy.lib.videoplayer.view.GeneralVideoPlayerView;
 
 /**

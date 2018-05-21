@@ -1,4 +1,4 @@
-package cn.joy.lib.videoplayer;
+package cn.joy.lib.videoplayer.ijk;
 
 import android.content.Context;
 import android.media.AudioManager;
@@ -6,17 +6,21 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
+import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.util.Log;
-import android.view.SurfaceView;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.Map;
 
+import cn.joy.lib.videoplayer.FileMediaDataSource;
+import cn.joy.lib.videoplayer.IVideoPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkTimedText;
@@ -31,18 +35,32 @@ public class IJKVideoPlayer implements IVideoPlayer {
 
 	private static final String TAG = "IJKVideoPlayer";
 
+	private static final int[] ALL_ASPECT_RATIO = {
+			IRenderView.AR_ASPECT_FIT_PARENT, IRenderView.AR_ASPECT_FILL_PARENT, IRenderView.AR_ASPECT_WRAP_CONTENT,
+			// IRenderView.AR_MATCH_PARENT,
+			IRenderView.AR_16_9_FIT_PARENT, IRenderView.AR_4_3_FIT_PARENT
+	};
+
 	private Context mAppContext;
 	private PlayHandler mHandler;
+	private ViewGroup mVideoView;
 
 	private Uri mUri;
 	private Map<String, String> mDataHeaders;
-	private IjkMediaPlayer mMediaPlayer;
+
+	private IRenderView.ISurfaceHolder mSurfaceHolder = null;
+	private IMediaPlayer mMediaPlayer;
+	private IRenderView mRenderView;
 	private VideoPlayerListener mListener;
-	private SurfaceView mSurfaceView;
 
 	private int mCurrState = STATE_IDLE;
 	private int mTargetState = STATE_IDLE;
 	private int mCurrentBufferPercentage = 0;
+	private int mSurfaceWidth, mSurfaceHeight;
+	private int mSeekWhenPrepared = 0;
+	private int mVideoWidth, mVideoHeight;
+	private int mVideoSarNum, mVideoSarDen;
+	private int mVideoRotationDegree;
 
 	public IJKVideoPlayer(Context context) {
 		mHandler = new PlayHandler(this);
@@ -127,10 +145,74 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		}
 	};
 
+	IRenderView.IRenderCallback mSHCallback = new IRenderView.IRenderCallback() {
+		@Override
+		public void onSurfaceChanged(@NonNull IRenderView.ISurfaceHolder holder, int format, int w, int h) {
+			if (holder.getRenderView() != mRenderView) {
+				Log.e(TAG, "onSurfaceChanged: unmatched render callback\n");
+				return;
+			}
+
+			mSurfaceWidth = w;
+			mSurfaceHeight = h;
+			boolean isValidState = (mTargetState == STATE_PLAYING);
+			boolean hasValidSize = !mRenderView.shouldWaitForResize() || (mVideoWidth == w && mVideoHeight == h);
+			if (mMediaPlayer != null && isValidState && hasValidSize) {
+				if (mSeekWhenPrepared != 0) {
+					seekTo(mSeekWhenPrepared);
+				}
+				start();
+			}
+		}
+
+		@Override
+		public void onSurfaceCreated(@NonNull IRenderView.ISurfaceHolder holder, int width, int height) {
+			if (holder.getRenderView() != mRenderView) {
+				Log.e(TAG, "onSurfaceCreated: unmatched render callback\n");
+				return;
+			}
+
+			mSurfaceHolder = holder;
+			if (mMediaPlayer != null)
+				bindSurfaceHolder(mMediaPlayer, holder);
+			else if (mTargetState == STATE_PLAYING)
+				openVideo();
+		}
+
+		@Override
+		public void onSurfaceDestroyed(@NonNull IRenderView.ISurfaceHolder holder) {
+			if (holder.getRenderView() != mRenderView) {
+				Log.e(TAG, "onSurfaceDestroyed: unmatched render callback\n");
+				return;
+			}
+
+			// after we return from this we can't use the surface any more
+			mSurfaceHolder = null;
+			// REMOVED: if (mMediaController != null) mMediaController.hide();
+			// REMOVED: release(true);
+			releaseWithoutStop();
+		}
+	};
+
+	// REMOVED: mSHCallback
+	private void bindSurfaceHolder(IMediaPlayer mp, IRenderView.ISurfaceHolder holder) {
+		if (mp == null)
+			return;
+
+		if (holder == null) {
+			mp.setDisplay(null);
+			return;
+		}
+
+		holder.bindToMediaPlayer(mp);
+	}
+
 	private void openVideo() {
 		if (mUri == null) {
 			throw new IllegalStateException("DataSource should be set before start play!");
 		}
+		if (mSurfaceHolder == null)
+			return;
 		mCurrState = STATE_PREPARING;
 		if (mListener != null) {
 			mListener.onPreparing();
@@ -140,7 +222,7 @@ public class IJKVideoPlayer implements IVideoPlayer {
 			mMediaPlayer.setDisplay(null);
 			mMediaPlayer.release();
 		}
-		mMediaPlayer = new IjkMediaPlayer();
+		mMediaPlayer = createPlayer();
 		// 使用多媒体音量
 		mMediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
 		// 保持屏幕常亮
@@ -171,19 +253,25 @@ public class IJKVideoPlayer implements IVideoPlayer {
 				mListener.onError(ERROR_LOAD_FAILED);
 			}
 		}
+		bindSurfaceHolder(mMediaPlayer, mSurfaceHolder);
 		mMediaPlayer.prepareAsync();
-		if (mSurfaceView != null) {
-			mMediaPlayer.setDisplay(mSurfaceView.getHolder());
-		}
+		//		if (mSurfaceView != null) {
+		//			mMediaPlayer.setDisplay(mSurfaceView.getHolder());
+		//		}
+	}
+
+
+	private IMediaPlayer createPlayer() {
+		return new IjkMediaPlayer();
 	}
 
 	/**
 	 * 开启硬编码
 	 */
 	public void openCodec() {
-		mMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1);
-		mMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1);
-		mMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1);
+		//		mMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1);
+		//		mMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1);
+		//		mMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1);
 	}
 
 	/**
@@ -197,6 +285,46 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		int progress = getProgress();
 		mListener.onProgress(duration, currentPosition, progress);
 		Log.d(TAG, "onProgress(duration:" + duration + ",position:" + currentPosition + ",progress:" + progress);
+	}
+
+	public void setRenderView(IRenderView renderView) {
+		if (mRenderView != null) {
+			if (mMediaPlayer != null)
+				mMediaPlayer.setDisplay(null);
+
+			View renderUIView = mRenderView.getView();
+			mRenderView.removeRenderCallback(mSHCallback);
+			mRenderView = null;
+			removeView(renderUIView);
+		}
+
+		if (renderView == null)
+			return;
+
+		mRenderView = renderView;
+		renderView.setAspectRatio(ALL_ASPECT_RATIO[0]);
+		if (mVideoWidth > 0 && mVideoHeight > 0)
+			renderView.setVideoSize(mVideoWidth, mVideoHeight);
+		if (mVideoSarNum > 0 && mVideoSarDen > 0)
+			renderView.setVideoSampleAspectRatio(mVideoSarNum, mVideoSarDen);
+		View renderUIView = mRenderView.getView();
+		FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+		renderUIView.setLayoutParams(lp);
+		addView(renderUIView);
+
+		mRenderView.addRenderCallback(mSHCallback);
+		mRenderView.setVideoRotation(mVideoRotationDegree);
+	}
+
+	private void addView(View view) {
+		if (mVideoView != null)
+			mVideoView.addView(view);
+	}
+
+	private void removeView(View view) {
+		if (mVideoView != null) {
+			mVideoView.removeView(view);
+		}
 	}
 
 	@Override
@@ -224,21 +352,17 @@ public class IJKVideoPlayer implements IVideoPlayer {
 
 	@Override
 	public void setSpeed(float speed) {
-		mMediaPlayer.setSpeed(speed);
+		if (mMediaPlayer instanceof IjkMediaPlayer) {
+			((IjkMediaPlayer) mMediaPlayer).setSpeed(speed);
+		}
 	}
 
 	@Override
-	public void attachToVideoView(View videoView) {
+	public void attachToVideoView(ViewGroup videoView) {
+		this.mVideoView = videoView;
 		if (videoView == null)
 			return;
-		if (videoView instanceof SurfaceView) {
-			mSurfaceView = (SurfaceView) videoView;
-		} else {
-			if (videoView instanceof ViewGroup) {
-				mSurfaceView = new SurfaceView(videoView.getContext());
-				((ViewGroup) videoView).addView(mSurfaceView, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-			}
-		}
+		setRenderView(new TextureRenderView(videoView.getContext()));
 	}
 
 	@Override
@@ -328,6 +452,11 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		return mCurrState;
 	}
 
+	public void releaseWithoutStop() {
+		if (mMediaPlayer != null)
+			mMediaPlayer.setDisplay(null);
+	}
+
 	@Override
 	public long getDuration() {
 		if (isPlayable())
@@ -375,7 +504,7 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		return mMediaPlayer != null && mCurrState != STATE_ERROR && mCurrState != STATE_IDLE && mCurrState != STATE_PREPARING;
 	}
 
-	protected IjkMediaPlayer getMediaPlayer() {
+	protected IMediaPlayer getMediaPlayer() {
 		return mMediaPlayer;
 	}
 
