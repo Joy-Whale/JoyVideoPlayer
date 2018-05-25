@@ -21,6 +21,8 @@
     <item name="playingSeekBar" type="id"/>
     <!-- 加载中view -->
     <item name="layoutLoading" type="id"/>
+    <!-- Error状态view -->
+    <item name="layoutError" type="id"/>
     <!-- 视频View -->
     <item name="layoutVideo" type="id"/>
     <!-- 控制view -->

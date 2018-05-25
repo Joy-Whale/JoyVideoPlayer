@@ -33,5 +33,4 @@ public class GeneralVideoPlayerView extends VideoPlayerView {
 		return R.layout.widget_general_video_player;
 	}
 
-
 }

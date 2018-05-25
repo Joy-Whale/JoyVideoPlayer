@@ -4,8 +4,6 @@ import android.content.Context;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
-import android.os.Handler;
-import android.os.Message;
 import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.util.Log;
@@ -16,11 +14,17 @@ import android.widget.FrameLayout;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.ref.WeakReference;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import cn.joy.lib.videoplayer.FileMediaDataSource;
 import cn.joy.lib.videoplayer.IVideoPlayer;
+import cn.joy.lib.videoplayer.utils.SimpleObserver;
+import io.reactivex.Observable;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.Disposable;
+import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
+import tv.danmaku.ijk.media.player.AndroidMediaPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkTimedText;
@@ -35,15 +39,9 @@ public class IJKVideoPlayer implements IVideoPlayer {
 
 	private static final String TAG = "IJKVideoPlayer";
 
-	private static final int[] ALL_ASPECT_RATIO = {
-			IRenderView.AR_ASPECT_FIT_PARENT, IRenderView.AR_ASPECT_FILL_PARENT, IRenderView.AR_ASPECT_WRAP_CONTENT,
-			// IRenderView.AR_MATCH_PARENT,
-			IRenderView.AR_16_9_FIT_PARENT, IRenderView.AR_4_3_FIT_PARENT
-	};
-
 	private Context mAppContext;
-	private PlayHandler mHandler;
 	private ViewGroup mVideoView;
+	private IJKSettings mSettings;
 
 	private Uri mUri;
 	private Map<String, String> mDataHeaders;
@@ -62,8 +60,10 @@ public class IJKVideoPlayer implements IVideoPlayer {
 	private int mVideoSarNum, mVideoSarDen;
 	private int mVideoRotationDegree;
 
+	// 进度更新操作器
+	private Disposable mProgressDisposable;
+
 	public IJKVideoPlayer(Context context) {
-		mHandler = new PlayHandler(this);
 		mAppContext = context.getApplicationContext();
 	}
 
@@ -119,7 +119,7 @@ public class IJKVideoPlayer implements IVideoPlayer {
 			mCurrState = STATE_PLAYBACK_COMPLETED;
 			mTargetState = STATE_PLAYBACK_COMPLETED;
 			// 关闭实时刷新
-			mHandler.stop();
+			stopUpdateProgress();
 			// 关闭播放
 			stop();
 			if (mListener != null) {
@@ -134,6 +134,9 @@ public class IJKVideoPlayer implements IVideoPlayer {
 			Log.d("jv", "onError " + what + " " + extra);
 			mCurrState = STATE_ERROR;
 			mTargetState = STATE_ERROR;
+			if (mListener != null) {
+				mListener.onError(what);
+			}
 			return false;
 		}
 	};
@@ -145,7 +148,7 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		}
 	};
 
-	IRenderView.IRenderCallback mSHCallback = new IRenderView.IRenderCallback() {
+	private IRenderView.IRenderCallback mSHCallback = new IRenderView.IRenderCallback() {
 		@Override
 		public void onSurfaceChanged(@NonNull IRenderView.ISurfaceHolder holder, int format, int w, int h) {
 			if (holder.getRenderView() != mRenderView) {
@@ -207,6 +210,9 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		holder.bindToMediaPlayer(mp);
 	}
 
+	/**
+	 * 开始播放
+	 */
 	private void openVideo() {
 		if (mUri == null) {
 			throw new IllegalStateException("DataSource should be set before start play!");
@@ -242,10 +248,8 @@ public class IJKVideoPlayer implements IVideoPlayer {
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && (TextUtils.isEmpty(scheme) || scheme.equalsIgnoreCase("file"))) {
 				IMediaDataSource dataSource = new FileMediaDataSource(new File(mUri.toString()));
 				mMediaPlayer.setDataSource(dataSource);
-			} else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
-				mMediaPlayer.setDataSource(mAppContext, mUri, mDataHeaders);
 			} else {
-				mMediaPlayer.setDataSource(mUri.toString());
+				mMediaPlayer.setDataSource(mAppContext, mUri, mDataHeaders);
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -260,34 +264,77 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		//		}
 	}
 
-
+	/**
+	 * 创建一个播放器
+	 */
 	private IMediaPlayer createPlayer() {
-		return new IjkMediaPlayer();
+		final IJKSettings settings = getSettings();
+		IMediaPlayer player;
+		switch (settings.getPlayerType()) {
+			case IJKSettings.PLAYER_ANDROID:
+				player = new AndroidMediaPlayer();
+				break;
+			case IJKSettings.PLAYER_IJK_EXO:
+				player = new IjkExoMediaPlayer(mAppContext);
+				break;
+			default:
+				IjkMediaPlayer ijk = new IjkMediaPlayer();
+				if (settings.isUsingMediaCodec()) {
+					ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1);
+					ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", settings.isUsingMediaCodecAutoRotate() ? "1" : "0");
+					ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", settings.isUsingMediaCodecHandleResolutionChange() ? "1" : "0");
+				} else {
+					ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 0);
+				}
+				ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "opensles", settings.isUsingOpenSLES() ? "1" : "0");
+				String pixelFormat = settings.getPixelFormat();
+				if (TextUtils.isEmpty(pixelFormat)) {
+					ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", IjkMediaPlayer.SDL_FCC_RV32);
+				} else {
+					ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", pixelFormat);
+				}
+				ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1);
+				ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0);
+				ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 0);
+				ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
+				player = ijk;
+				break;
+		}
+		player.setLogEnabled(false);
+		return player;
 	}
 
 	/**
-	 * 开启硬编码
+	 * 创建一个渲染器
 	 */
-	public void openCodec() {
-		//		mMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1);
-		//		mMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1);
-		//		mMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1);
-	}
-
-	/**
-	 * 更新当前进度
-	 */
-	private void updateProgress() {
-		if (!isPlayable() || mListener == null)
+	private void createRenderView() {
+		if (mVideoView == null || mVideoView.getContext() == null)
 			return;
-		long duration = getDuration();
-		long currentPosition = getCurrentPosition();
-		int progress = getProgress();
-		mListener.onProgress(duration, currentPosition, progress);
-		Log.d(TAG, "onProgress(duration:" + duration + ",position:" + currentPosition + ",progress:" + progress);
+		final Context context = mVideoView.getContext();
+		final IJKSettings settings = getSettings();
+		IRenderView renderView;
+		switch (settings.getRenderViewType()) {
+			case IJKSettings.RENDER_VIEW_SURFACE:
+				renderView = new SurfaceRenderView(context);
+				break;
+			default:
+				renderView = new TextureRenderView(context);
+				break;
+		}
+		renderView.setAspectRatio(settings.getRenderAspectRatio());
+		if (mVideoWidth > 0 && mVideoHeight > 0)
+			renderView.setVideoSize(mVideoWidth, mVideoHeight);
+		if (mVideoSarNum > 0 && mVideoSarDen > 0)
+			renderView.setVideoSampleAspectRatio(mVideoSarNum, mVideoSarDen);
+
+		setRenderView(renderView);
 	}
 
-	public void setRenderView(IRenderView renderView) {
+	/**
+	 * 设置渲染View
+	 * @param renderView 渲染View
+	 */
+	private void setRenderView(IRenderView renderView) {
 		if (mRenderView != null) {
 			if (mMediaPlayer != null)
 				mMediaPlayer.setDisplay(null);
@@ -302,11 +349,7 @@ public class IJKVideoPlayer implements IVideoPlayer {
 			return;
 
 		mRenderView = renderView;
-		renderView.setAspectRatio(ALL_ASPECT_RATIO[0]);
-		if (mVideoWidth > 0 && mVideoHeight > 0)
-			renderView.setVideoSize(mVideoWidth, mVideoHeight);
-		if (mVideoSarNum > 0 && mVideoSarDen > 0)
-			renderView.setVideoSampleAspectRatio(mVideoSarNum, mVideoSarDen);
+
 		View renderUIView = mRenderView.getView();
 		FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
 		renderUIView.setLayoutParams(lp);
@@ -325,6 +368,18 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		if (mVideoView != null) {
 			mVideoView.removeView(view);
 		}
+	}
+
+	/**
+	 * 更新当前进度
+	 */
+	private void updateProgress() {
+		if (!isPlayable() || mListener == null)
+			return;
+		long duration = getDuration();
+		long currentPosition = getCurrentPosition();
+		int progress = getProgress();
+		mListener.onProgress(duration, currentPosition, progress);
 	}
 
 	@Override
@@ -358,11 +413,22 @@ public class IJKVideoPlayer implements IVideoPlayer {
 	}
 
 	@Override
+	public void setLooping(boolean loop) {
+		mMediaPlayer.setLooping(loop);
+	}
+
+	@Override
 	public void attachToVideoView(ViewGroup videoView) {
+		// 如果当前的视频Layout不为空,需要先清除掉当前视频Layout中添加的RenderView,然后重新添加RenderView
+		if (mVideoView != null) {
+			mVideoView.removeAllViews();
+			releaseWithoutStop();
+		}
 		this.mVideoView = videoView;
 		if (videoView == null)
 			return;
-		setRenderView(new TextureRenderView(videoView.getContext()));
+		// 设置一个默认的渲染器
+		createRenderView();
 	}
 
 	@Override
@@ -385,7 +451,7 @@ public class IJKVideoPlayer implements IVideoPlayer {
 			case STATE_PAUSE:
 				mMediaPlayer.start();
 				mCurrState = STATE_PLAYING;
-				mHandler.start();
+				startUpdateProgress();
 				if (mListener != null) {
 					mListener.onStart();
 				}
@@ -402,11 +468,11 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		if (isPlaying()) {
 			mMediaPlayer.pause();
 			mCurrState = STATE_PAUSE;
-			mHandler.stop();
 			if (mListener != null) {
 				mListener.onPause();
 			}
 		}
+		stopUpdateProgress();
 		mTargetState = STATE_PAUSE;
 	}
 
@@ -424,7 +490,7 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		mMediaPlayer.stop();
 		mMediaPlayer.release();
 		mCurrState = STATE_IDLE;
-		mHandler.stop();
+		stopUpdateProgress();
 		if (mListener != null) {
 			mListener.onStop();
 		}
@@ -435,8 +501,8 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		mMediaPlayer.reset();
 		mMediaPlayer.release();
 		mMediaPlayer = null;
-		mHandler.stop();
 		mCurrState = STATE_IDLE;
+		stopUpdateProgress();
 		if (mListener != null) {
 			mListener.onDestroy();
 		}
@@ -488,6 +554,11 @@ public class IJKVideoPlayer implements IVideoPlayer {
 			mMediaPlayer.seekTo(position);
 	}
 
+	@Override
+	public boolean isLooping() {
+		return mMediaPlayer.isLooping();
+	}
+
 	/**
 	 * 是否正在播放
 	 */
@@ -504,42 +575,47 @@ public class IJKVideoPlayer implements IVideoPlayer {
 		return mMediaPlayer != null && mCurrState != STATE_ERROR && mCurrState != STATE_IDLE && mCurrState != STATE_PREPARING;
 	}
 
+	/**
+	 * 开始更新进度
+	 */
+	private void startUpdateProgress() {
+		if (mProgressDisposable != null) {
+			mProgressDisposable.dispose();
+		}
+		Observable.interval(500, TimeUnit.MILLISECONDS).observeOn(AndroidSchedulers.mainThread()).subscribe(new SimpleObserver<Long>() {
+
+			@Override
+			public void onSubscribe(Disposable d) {
+				mProgressDisposable = d;
+			}
+
+			@Override
+			public void onNext(Long o) {
+				super.onNext(o);
+				updateProgress();
+			}
+		});
+	}
+
+	/**
+	 * 停止更新进度
+	 */
+	private void stopUpdateProgress() {
+		if (mProgressDisposable != null) {
+			mProgressDisposable.dispose();
+		}
+		mProgressDisposable = null;
+	}
+
 	protected IMediaPlayer getMediaPlayer() {
 		return mMediaPlayer;
 	}
 
-	private static class PlayHandler extends Handler {
+	public IJKSettings getSettings() {
+		return mSettings == null ? mSettings = IJKSettings.getDefault() : mSettings;
+	}
 
-		static final int MSG_UPDATE_PROGRESS = 1;
-
-		WeakReference<IJKVideoPlayer> mPlayer;
-
-		PlayHandler(IJKVideoPlayer player) {
-			mPlayer = new WeakReference<IJKVideoPlayer>(player);
-		}
-
-		@Override
-		public void handleMessage(Message msg) {
-			super.handleMessage(msg);
-			switch (msg.what) {
-				case MSG_UPDATE_PROGRESS:
-					IJKVideoPlayer player = mPlayer.get();
-					if (player == null) {
-						stop();
-						return;
-					}
-					player.updateProgress();
-					sendEmptyMessageDelayed(MSG_UPDATE_PROGRESS, 500);
-					break;
-			}
-		}
-
-		void start() {
-			sendEmptyMessage(MSG_UPDATE_PROGRESS);
-		}
-
-		void stop() {
-			removeMessages(MSG_UPDATE_PROGRESS);
-		}
+	public void setSettings(IJKSettings mSettings) {
+		this.mSettings = mSettings;
 	}
 }

@@ -1,8 +1,11 @@
 package cn.joy;
 
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.app.FragmentActivity;
+import android.util.Log;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -27,5 +30,18 @@ public class MainActivity extends FragmentActivity {
 
 		mPlayer.setVideoPlayer(new IJKVideoPlayer(this));
 		mPlayer.setDataSource("http://qukufile2.qianqian.com/data2/video/591488159/423925a97b5e5aad402d5b7aa85be198/591488159.mp4", null);
+	}
+
+	@Override
+	public void onConfigurationChanged(Configuration newConfig) {
+		super.onConfigurationChanged(newConfig);
+		//		switch (newConfig.orientation) {
+		//			case ActivityInfo.SCREEN_ORIENTATION_PORTRAIT:
+		//				mPlayer.toggleFullScreen(false);
+		//				break;
+		//			case ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE:
+		//				mPlayer.toggleFullScreen(true);
+		//				break;
+		//		}
 	}
 }

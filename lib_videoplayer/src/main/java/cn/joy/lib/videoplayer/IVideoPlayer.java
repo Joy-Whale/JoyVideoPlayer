@@ -138,6 +138,12 @@ public interface IVideoPlayer {
 	void setSpeed(float speed);
 
 	/**
+	 * 设置是否循环
+	 * @param loop 循环
+	 */
+	void setLooping(boolean loop);
+
+	/**
 	 * 加载VideoView
 	 * @param videoView videoView
 	 */
@@ -216,6 +222,11 @@ public interface IVideoPlayer {
 	 * @param position 进度
 	 */
 	void seekTo(long position);
+
+	/**
+	 * 当前是否循环播放
+	 */
+	boolean isLooping();
 
 	/**
 	 * 是否正在播放
