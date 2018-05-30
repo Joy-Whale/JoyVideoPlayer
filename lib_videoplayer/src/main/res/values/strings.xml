@@ -9,4 +9,9 @@
     <string name="VideoView_ar_match_parent">Free / Fill parent</string>
     <string name="VideoView_ar_16_9_fit_parent">16:9 / Fit parent</string>
     <string name="VideoView_ar_4_3_fit_parent">4:3 / Fit parent</string>
+    
+    <string name="video_wifi_network_title">当前为非wifi状态,是否继续播放</string>
+    <string name="video_wifi_network_position">是</string>
+    <string name="video_wifi_network_negative">是</string>
+
 </resources>

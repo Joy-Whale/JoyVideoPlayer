@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.media.AudioManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.support.annotation.NonNull;
 import android.support.v4.app.FragmentActivity;
 import android.support.v7.app.ActionBar;
@@ -141,24 +143,12 @@ public class CommonUtils {
 		return dm.heightPixels;
 	}
 
-	public static int getVolumeMax(Context context) {
-		return getAudioManager(context).getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-	}
-
-	public static int getVolume(Context context) {
-		return getAudioManager(context).getStreamVolume(AudioManager.STREAM_MUSIC);
-	}
-
-	public static void setVolume(Context context, int volume) {
-		getAudioManager(context).setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0);
-	}
-
-	private static AudioManager mAudioManager;
-
-	private static AudioManager getAudioManager(@NonNull Context context) {
-		if (mAudioManager == null) {
-			mAudioManager = (AudioManager) context.getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
-		}
-		return mAudioManager;
+	/**
+	 * 检测是否为wifi状态
+	 */
+	public static boolean isWifiConnected(Context context) {
+		ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+		NetworkInfo wifiNetworkInfo = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+		return wifiNetworkInfo.isConnected();
 	}
 }

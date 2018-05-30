@@ -1,8 +1,10 @@
 package cn.joy.lib.videoplayer.view;
 
 import android.app.Activity;
+import android.app.Dialog;
 import android.app.Service;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.res.Configuration;
 import android.media.AudioManager;
 import android.net.Uri;
@@ -11,6 +13,7 @@ import android.os.Message;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.view.GestureDetectorCompat;
+import android.support.v7.app.AlertDialog;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -31,6 +34,7 @@ import java.util.Map;
 import cn.joy.lib.videoplayer.IVideoPlayer;
 import cn.joy.lib.videoplayer.R;
 import cn.joy.lib.videoplayer.SimpleVideoPlayerListener;
+import cn.joy.lib.videoplayer.dialog.VolumeBrightnessDialog;
 import cn.joy.lib.videoplayer.utils.CommonUtils;
 
 /**
@@ -45,9 +49,6 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 
 	private static final String TAG = "VP";
 	private static final int ID_FULL_SCREEN = R.id.videoFullScreen;
-
-	// 触摸拖动改变的偏差值
-	private static final int TOUCH_SEEKING_BIAS = 50;
 
 	private ViewGroup mLayoutController;
 	private ViewGroup mLayoutVideo;
@@ -65,21 +66,16 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 	private IVideoPlayer mVideoPlayer;
 	private VideoPlayViewSettings mSettings;
 
-	// 播放状态下自动隐藏控件的时间，默认2000毫秒
-	private int mDurationToAutoHideWidgetOnPlaying = 2000;
 	// 当前播放器是否为横屏模式
 	private boolean mIsLandMode = false;
 	// 当前横屏是否已启用
 	private boolean mIsLandEnabled = false;
 	// 当前状态是否为锁屏状态
 	private boolean mIsLock = false;
-	// 是否置反声音和亮度调节,正常为左亮度|右声音
-	private boolean mIsVolumeBrightnessSeekReversed = false;
-	// 是否只有在全屏模式下才能滑动调节亮度和声音
-	private boolean mIsVolumeBrightnessSeekFullScreen = true;
+	// 是否正在改变音量或亮度
 	private boolean mIsVolumeSeeking = false;
 	private boolean mIsBrightnessSeeking = false;
-	private int mSeekBias = TOUCH_SEEKING_BIAS;
+	private float mVolumeDownPercent;
 	// 当前屏幕方向
 	private int mOrientation = Configuration.ORIENTATION_PORTRAIT;
 
@@ -90,6 +86,8 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 	private GestureDetectorCompat mDetector;
 
 	private AudioManager mAudioManager;
+
+	private VolumeBrightnessDialog mVolumeBrightnessDialog;
 
 	public VideoPlayerView(@NonNull Context context) {
 		this(context, null);
@@ -148,6 +146,25 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 		}
 	}
 
+	/**
+	 * 多媒体音量监测
+	 */
+	protected AudioManager.OnAudioFocusChangeListener mAudioFocusChangeListener = new AudioManager.OnAudioFocusChangeListener() {
+		@Override
+		public void onAudioFocusChange(int focusChange) {
+			switch (focusChange) {
+				case AudioManager.AUDIOFOCUS_GAIN:
+					break;
+				case AudioManager.AUDIOFOCUS_LOSS:
+					break;
+				case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
+					break;
+				case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
+					break;
+			}
+		}
+	};
+
 	private GestureDetector.OnGestureListener mGestureListener = new GestureDetector.SimpleOnGestureListener() {
 
 		// 单击
@@ -185,17 +202,18 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 			case MotionEvent.ACTION_MOVE:
 				float deltaX = x - mLastX;
 				float deltaY = y - mLastY;
+				Log.d(TAG, "onTouchEvent move : " + Math.abs(x - mDownX));
 				// 垂直状态下滑动大于50
-				if (Math.abs(x - mDownX) > mSeekBias) {
+				if (Math.abs(y - mDownY) > getSettings().getVolumeBrightnessSeekBias()) {
 					if (!mSeeking) {
-						onTouchSeekingStart(mDownX, mDownY);
 						mSeeking = true;
+						onTouchSeekingStart(mDownX, mDownY);
 					}
 					onTouchSeeking(deltaX, deltaY);
 				}
 				mLastX = x;
 				mLastY = y;
-				break;
+				return true;
 			case MotionEvent.ACTION_UP:
 				if (mSeeking) {
 					onTouchSeekEnd();
@@ -220,15 +238,20 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 		// 如果当前不是全屏状态需要判断全屏状态下是否支持拖动改变音量和亮度的功能
 		// 如果当前为横屏则不支持
 		// 如果当前不能播放也不支持
-		if (mIsVolumeBrightnessSeekFullScreen && !isLandMode() || mIsLock || !isPlayable()) {
+		if (!getSettings().isVolumeBrightnessSeekEnabled() || getSettings().isVolumeBrightnessSeekFullScreen() && !isLandMode() || mIsLock || !isPlayable()) {
 			return;
 		}
 		if (downX < getWidth() / 2) {
-			mIsBrightnessSeeking = !mIsVolumeBrightnessSeekReversed;
+			mIsBrightnessSeeking = !getSettings().isVolumeBrightnessSeekReversed();
 			mIsVolumeSeeking = !mIsBrightnessSeeking;
+			Log.d(TAG, "onTouchSeekingStartBrightness");
 		} else {
-			mIsBrightnessSeeking = mIsVolumeBrightnessSeekReversed;
+			mIsBrightnessSeeking = getSettings().isVolumeBrightnessSeekReversed();
 			mIsVolumeSeeking = !mIsBrightnessSeeking;
+			Log.d(TAG, "onTouchSeekingStartVolume");
+		}
+		if (mIsVolumeSeeking) {
+			mVolumeDownPercent = getCurrentAudioVolumePercent();
 		}
 	}
 
@@ -249,9 +272,14 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 		}
 		// 声音调节
 		if (mIsVolumeSeeking) {
-			float curr = getCurrentAudioVolumePercent() + percent;
-			curr = setAudioVolumePercent(curr);
-			onSeekingVolume(curr);
+			mVolumeDownPercent += percent;
+			if (mVolumeDownPercent > 1) {
+				mVolumeDownPercent = 1;
+			} else if (mVolumeDownPercent < 0) {
+				mVolumeDownPercent = 0;
+			}
+			setAudioVolumePercent(mVolumeDownPercent);
+			onSeekingVolume(mVolumeDownPercent);
 		}
 	}
 
@@ -271,24 +299,36 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 
 	protected void onSeekingVolume(float percentChanged) {
 		Log.e(TAG, "onSeekingVolume " + percentChanged);
+		if (mVolumeBrightnessDialog == null)
+			mVolumeBrightnessDialog = new VolumeBrightnessDialog(getContext());
+		if (!mVolumeBrightnessDialog.isShowing())
+			mVolumeBrightnessDialog.show();
+		mVolumeBrightnessDialog.volume().updatePercent(percentChanged);
 	}
 
 	protected void onSeekingBrightness(float percentChanged) {
 		Log.e(TAG, "onSeekingBrightness " + percentChanged);
+		if (mVolumeBrightnessDialog == null)
+			mVolumeBrightnessDialog = new VolumeBrightnessDialog(getContext());
+		if (!mVolumeBrightnessDialog.isShowing())
+			mVolumeBrightnessDialog.show();
+		mVolumeBrightnessDialog.brightness().updatePercent(percentChanged);
 	}
 
 	/**
 	 * 拖动修改音量结束
 	 */
 	protected void onSeekVolumeEnd() {
-
+		if (mVolumeBrightnessDialog != null)
+			mVolumeBrightnessDialog.dismiss();
 	}
 
 	/**
 	 * 拖动修改亮度结束
 	 */
 	protected void onSeekBrightnessEnd() {
-
+		if (mVolumeBrightnessDialog != null)
+			mVolumeBrightnessDialog.dismiss();
 	}
 
 	/**
@@ -306,6 +346,40 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 	 */
 	protected boolean onDoubleTap(MotionEvent e) {
 		Log.d(TAG, "onDoubleTap");
+		return false;
+	}
+
+	/**
+	 * 播放按钮点击
+	 */
+	protected void onClickPlayButton() {
+		if (isPlaying()) {
+			pause();
+		} else if (!isPlayable()) {
+			if (!getSettings().isWifiNetworkPlayable() || CommonUtils.isWifiConnected(getContext()) || !CommonUtils.isWifiConnected(getContext()) && onNotWifiNetworkClickPlayButton())
+				start();
+		} else {
+			start();
+		}
+	}
+
+	/**
+	 * 非wifi状态下点击播放按钮
+	 * @return 是否可以直接播放
+	 */
+	protected boolean onNotWifiNetworkClickPlayButton() {
+		Dialog dialog = new AlertDialog.Builder(getContext()) //
+				.setTitle(R.string.video_wifi_network_title) //
+				.setPositiveButton(R.string.video_wifi_network_position, new DialogInterface.OnClickListener() {
+					@Override
+					public void onClick(DialogInterface dialog, int which) {
+						start();
+						dialog.dismiss();
+					}
+				}) //
+				.setNegativeButton(R.string.video_wifi_network_negative, null) //
+				.create();
+		dialog.show();
 		return false;
 	}
 
@@ -352,7 +426,7 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 		if (percent > 1) {
 			percent = 1f;
 		} else if (percent < 0) {
-			percent = 0.1f;
+			percent = 0f;
 		}
 		WindowManager.LayoutParams params = ((Activity) getContext()).getWindow().getAttributes();
 		params.screenBrightness = percent;
@@ -386,15 +460,16 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 		onIdle();
 
 		// 播放按钮事件
-		if (mBtnPlay != null)
-			mBtnPlay.setOnClickListener(mOnClickListener);
+		changeWidgetClickListener(mBtnPlay, mOnClickListener);
 
-		if (mBtnLock != null)
-			mBtnLock.setOnClickListener(mOnClickListener);
+		// 锁屏
+		changeWidgetClickListener(mBtnLock, mOnClickListener);
 
 		// 全屏
-		if (mBtnFullScreen != null)
-			mBtnFullScreen.setOnClickListener(mOnClickListener);
+		changeWidgetClickListener(mBtnFullScreen, mOnClickListener);
+
+		// 退出按钮
+		changeWidgetClickListener(mBtnBack, mOnClickListener);
 
 		// SeekBar
 		if (mSeekBar != null)
@@ -406,11 +481,7 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 		public void onClick(View v) {
 			// 播放按钮
 			if (v.getId() == R.id.btnPlay) {
-				if (v.isSelected()) {
-					pause();
-				} else {
-					start();
-				}
+				onClickPlayButton();
 			}
 			// 全屏按钮
 			else if (v.getId() == R.id.btnFullScreen) {
@@ -597,6 +668,8 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 
 	@Override
 	public void onStart() {
+		// 注册音频监听
+		mAudioManager.requestAudioFocus(mAudioFocusChangeListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
 		onChangeUiToPlaying();
 		requestHideGeneralWidgetDelay();
 		updateOrientationHelper();
@@ -604,6 +677,8 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 
 	@Override
 	public void onPause() {
+		// 注册音频监听
+		mAudioManager.abandonAudioFocus(mAudioFocusChangeListener);
 		onChangeUiToPause();
 		updateOrientationHelper();
 	}
@@ -627,12 +702,16 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 
 	@Override
 	public void onPlaybackCompleted() {
+		// 取消音频监听
+		mAudioManager.abandonAudioFocus(mAudioFocusChangeListener);
 		onChangeUiToComplete();
 		updateOrientationHelper();
 	}
 
 	@Override
 	public boolean onError(int errCode) {
+		// 取消音频监听
+		mAudioManager.abandonAudioFocus(mAudioFocusChangeListener);
 		// 设置播放按钮状态变为可播放状态
 		if (mBtnPlay != null) {
 			mBtnPlay.setSelected(false);
@@ -842,7 +921,7 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 	}
 
 	private void requestHideGeneralWidgetDelay() {
-		mHandler.hideGeneralWidgetDelay(mDurationToAutoHideWidgetOnPlaying);
+		mHandler.hideGeneralWidgetDelay(getAutoHideWidgetDuration());
 	}
 
 	protected void changeWidgetVisibility(View view, int visible) {
@@ -867,6 +946,12 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 		if (mSeekBar != null) {
 			mSeekBar.setProgress(progress);
 			mSeekBar.setSecondaryProgress(bufferingProgress);
+		}
+	}
+
+	protected void changeWidgetClickListener(View view, OnClickListener listener) {
+		if (view != null) {
+			view.setOnClickListener(listener);
 		}
 	}
 
@@ -996,12 +1081,12 @@ public abstract class VideoPlayerView extends FrameLayout implements IVideoPlaye
 		return mVideoPlayer;
 	}
 
-	public int getAutoHideWidgetOnPlayingDuration() {
-		return mDurationToAutoHideWidgetOnPlaying;
+	public int getAutoHideWidgetDuration() {
+		return getSettings().getAutoHideWidgetDuration();
 	}
 
-	public void setAutoHideWidgetOnPlayingDuration(int duration) {
-		this.mDurationToAutoHideWidgetOnPlaying = duration;
+	public void setAutoHideWidgetDuration(int duration) {
+		getSettings().setAutoHideWidgetDuration(duration);
 	}
 
 	protected ViewGroup getParentViewGroup() {
